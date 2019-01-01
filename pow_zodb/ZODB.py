@@ -2,6 +2,7 @@
 
 from rdflib.plugins.memory import randid
 from rdflib.store import Store
+from rdflib.events import Dispatcher
 from rdflib import BNode, RDF
 
 from persistent import Persistent
@@ -98,6 +99,16 @@ class ZODBStore(Persistent, Store):
                 self._add_indexed(t)
         return self._rdf_type_index_v
 
+    @property
+    def dispatcher(self):
+        if not hasattr(self, '_v_dispatcher'):
+            self._v_dispatcher = Dispatcher()
+        return self._v_dispatcher
+
+    @dispatcher.setter
+    def dispatcher(self, dispatcher):
+        self._v_dispatcher = dispatcher
+
     def _rdf_type_id(self):
         if not hasattr(self, '__rdf_type_id_v'):
             self.__rdf_type_id_v = self.__obj2id(RDF.type)
@@ -131,6 +142,7 @@ class ZODBStore(Persistent, Store):
             encquads = list()
             for q in qgroup:
                 ctx = _fix_ctx(q[3])
+                Store.add(self, q[:3], q[3], False)
                 encquads.append(((self.__obj2id(q[0]),
                                   self.__obj2id(q[1]),
                                   self.__obj2id(q[2])),
@@ -561,15 +573,17 @@ class ZODBStore(Persistent, Store):
             for min_id, max_id in slices:
                 items = dict(index.iteritems(min=min_id, max=max_id))
                 for y in obj_ids:
-                    if aid is None and bid is None:
-                        results.add(items[y])
-                    elif aid is None:
-                        results.add(z for z in items[y] if z[bidx] == bid)
-                    elif bid is None:
-                        results.add(z for z in items[y] if z[aidx] == aid)
-                    else:
-                        results.add(z for z in items[y]
-                                    if (z[aidx] == aid and z[bidx] == bid))
+                    yitems = items.get(y)
+                    if yitems:
+                        if aid is None and bid is None:
+                            results.add(yitems)
+                        elif aid is None:
+                            results.add(z for z in yitems if z[bidx] == bid)
+                        elif bid is None:
+                            results.add(z for z in yitems if z[aidx] == aid)
+                        else:
+                            results.add(z for z in yitems
+                                        if (z[aidx] == aid and z[bidx] == bid))
 
             return ((self.__decodeTriple(enctriple),
                      self.__contexts(enctriple))
