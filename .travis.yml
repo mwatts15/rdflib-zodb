@@ -4,6 +4,7 @@ python:
   - 2.7
 
 before_install:
+- pip install --upgrade pip
 - pip install --default-timeout 60 tox
 # Travis-CI apparently has this built-in and no upgrade is done when our setup runs
 - pip install --upgrade pytest>=3.4.0 
