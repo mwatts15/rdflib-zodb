@@ -666,7 +666,7 @@ class ZODBStore(Persistent, Store):
         """return a generator which yields all the triples (unencoded) of
            the given context"""
         for tset in self.__subjectIndex.values():
-            for enctriple in self.family.OO.Set(tset):  # copy
+            for enctriple in set(tset):  # copy
                 if self.__tripleHasContext(enctriple, cid):
                     yield (self.__decodeTriple(enctriple),
                            self.__contexts(enctriple))
