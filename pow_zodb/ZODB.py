@@ -65,7 +65,6 @@ class ZODBStore(Persistent, Store):
 
     family = BTrees.family32
     __context_lengths = None
-    __type_index = None
 
     def __init__(self, configuration=None, identifier=None, family=None):
         super(ZODBStore, self).__init__(configuration, identifier)
@@ -88,7 +87,6 @@ class ZODBStore(Persistent, Store):
 
         # index of rdf:type triples
         # XXX: Make this generic
-        self.__type_index = self.family.IO.BTree()
         self._rdf_type_id()
 
     def _rdf_type_index(self):
@@ -410,7 +408,7 @@ class ZODBStore(Persistent, Store):
             # the triple didn't exist before in the store
             dct = {cid: quoted}
             if not quoted:
-                dct[defid] = quoted
+                dct[defid] = False
 
             x = PersistentDict(dct)
             self.__tripleContexts[enctriple] = x
@@ -540,12 +538,12 @@ class ZODBStore(Persistent, Store):
             return self.triples(triple, context)
         else:
             results = set()
+
             aid = self.__obj2id_finf(triple[aidx])
             if aid is NO_ID:
                 return self.__emptygen()
 
             bid = self.__obj2id_finf(triple[bidx])
-
             if bid is NO_ID:
                 return self.__emptygen()
 
@@ -619,8 +617,6 @@ class ZODBStore(Persistent, Store):
             else:
                 return self.triples((None, predicate, object_), context)
         elif isinstance(predicate, list):
-            assert not isinstance(
-                subject, list), "predicate / subject are both lists"
             if predicate:
                 return self.__exo(self.__predicateIndex, triple, context,
                                   1, 0, 2)
