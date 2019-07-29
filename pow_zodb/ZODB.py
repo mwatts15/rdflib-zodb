@@ -394,7 +394,6 @@ class ZODBStore(Persistent, Store):
                 # triple exists with default ctx info
                 # start with a copy of the default ctx info
                 tripctx = self.__defaultContexts.copy()
-                self.__tripleContexts[enctriple] = tripctx
 
             if cid not in tripctx:
                 self._context_length(cid).change(1)
@@ -410,20 +409,18 @@ class ZODBStore(Persistent, Store):
             if not quoted:
                 dct[defid] = False
 
-            x = PersistentDict(dct)
-            self.__tripleContexts[enctriple] = x
-            tripctx = self.__tripleContexts[enctriple]
+            tripctx = PersistentDict(dct)
 
             if not quoted:
                 self._context_length(defid).change(1)
 
         # if this is the first ever triple in the store, set default ctx info
         if self.__defaultContexts is None:
-            self.__defaultContexts = self.__tripleContexts[enctriple]
+            self.__defaultContexts = tripctx
 
         # if the context info is the same as default, no need to store it
-        if tripctx == self.__defaultContexts:
-            del self.__tripleContexts[enctriple]
+        if tripctx and tripctx != self.__defaultContexts:
+            self.__tripleContexts[enctriple] = tripctx
 
     def __getTripleContexts(self, enctriple, skipQuoted=False):
         """return a list of (encoded) contexts for the triple, skipping
