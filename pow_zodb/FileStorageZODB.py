@@ -14,6 +14,9 @@ L = logging.getLogger(__name__)
 
 
 class FileStorageZODBStore(Store):
+    '''
+    `~ZODB.FileStorage.FileStorage`-backed Store
+    '''
 
     context_aware = True
     formula_aware = True
