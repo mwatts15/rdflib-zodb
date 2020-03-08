@@ -77,6 +77,7 @@ setup(
     entry_points={
         'rdf.plugins.store': [
             'ZODB = pow_zodb.ZODB:ZODBStore',
+            'FileStorageZODB = pow_zodb.FileStorageZODB:FileStorageZODBStore',
         ],
     }
 )

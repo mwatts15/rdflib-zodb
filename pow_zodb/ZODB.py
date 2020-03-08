@@ -401,7 +401,7 @@ class ZODBStore(Persistent, Store):
             if not quoted:
                 if defid not in tripctx:
                     self._context_length(defid).change(1)
-                tripctx[defid] = quoted
+                tripctx[defid] = False
         else:
             self._context_length(cid).change(1)
             # the triple didn't exist before in the store
