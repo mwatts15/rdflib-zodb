@@ -29,10 +29,20 @@ class FileStorageZODBStore(Store):
         self._store = None
 
     def open(self, configuration, create=True):
-        openstr = os.path.abspath(configuration)
+        if isinstance(configuration, dict):
+            url = configuration.get('url', None)
+            if url is None:
+                raise ValueError('FileStorageZODBStore configuration dict must have a "url" key')
+            openstr = os.path.abspath(url)
+            params = {k: v for k, v in configuration.items() if k != 'url'}
+        elif isinstance(configuration, str):
+            openstr = os.path.abspath(configuration)
+            params = dict()
+        else:
+            raise TypeError(f'Not an expected configuration type: {configuration} of type {type(configuration)}')
 
         try:
-            fs = FileStorage(openstr)
+            fs = FileStorage(openstr, **params)
         except IOError:
             L.exception("Failed to create a FileStorage")
             raise FileStorageInitFailed(openstr)
