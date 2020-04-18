@@ -10,6 +10,7 @@ from persistent.dict import PersistentDict
 import transaction
 import logging
 
+import contextlib
 import itertools
 
 import BTrees
@@ -80,6 +81,8 @@ class ZODBStore(Persistent, Store):
         self.__predicateIndex = self.family.IO.BTree()
         # object index key: oid val: enctriple
         self.__objectIndex = self.family.IO.BTree()
+        # context index key: cid val: enctriple
+        self.__contextIndex = self.family.IO.BTree()
         self.__tripleContexts = self.family.OO.BTree()
         self.__all_contexts = self.family.OO.TreeSet()
         self.__defaultContexts = None
@@ -106,6 +109,18 @@ class ZODBStore(Persistent, Store):
     @dispatcher.setter
     def dispatcher(self, dispatcher):
         self._v_dispatcher = dispatcher
+
+    @contextlib.contextmanager
+    def _in_all_triples(self):
+        self._v_all_triples = True
+        try:
+            yield
+        finally:
+            del self._v_all_triples
+
+    @property
+    def _is_in_all_triples(self):
+        return getattr(self, '_v_all_triples', False)
 
     def _rdf_type_id(self):
         if not hasattr(self, '__rdf_type_id_v'):
@@ -222,7 +237,11 @@ class ZODBStore(Persistent, Store):
             context = DEFAULT
         defid = self.__obj2id(DEFAULT)
         req_cid = self.__obj2id(context)
+
+        was_in_all_triples = False
+
         for triple, contexts in self.triples(triplepat, context):
+            was_in_all_triples = self._is_in_all_triples
             enctriple = self.__encodeTriple(triple)
             for cid in self.__getTripleContexts(enctriple):
                 if context is not DEFAULT and req_cid != cid:
@@ -246,6 +265,14 @@ class ZODBStore(Persistent, Store):
                 not self.graph_aware:
             # remove the whole context but not empty graphs
             self.__all_contexts.remove(context)
+            self.__contextIndex.pop(req_cid)
+        if was_in_all_triples:
+            trips = self.__contextIndex.get(req_cid, None)
+            if trips is not None:
+                if isinstance(triplepat[2], tuple):
+                    raise NotImplementedError('Cannot remove ranges')
+                else:
+                    self.__contextIndex.pop(req_cid)
 
     def triples(self, triplein, context=None):
         rng = None
@@ -279,8 +306,8 @@ class ZODBStore(Persistent, Store):
         # optimize "triple in graph" case (all parts given)
         if sid is not None and pid is not None and oid is not None:
             if sid in self.__subjectIndex and \
-               enctriple in self.__subjectIndex[sid] and \
-               self.__tripleHasContext(enctriple, cid):
+                    enctriple in self.__subjectIndex[sid] and \
+                    self.__tripleHasContext(enctriple, cid):
                 return ((triplein, self.__contexts(enctriple)) for i in [0])
             else:
                 return self.__emptygen()
@@ -419,8 +446,14 @@ class ZODBStore(Persistent, Store):
             self.__defaultContexts = tripctx
 
         # if the context info is the same as default, no need to store it
-        if tripctx and tripctx != self.__defaultContexts:
+        if tripctx != self.__defaultContexts:
             self.__tripleContexts[enctriple] = tripctx
+        for c in tripctx:
+            ctx_idx = self.__contextIndex.get(c, None)
+            if ctx_idx is None:
+                self.__contextIndex[c] = ctx_idx = self.family.OO.Set((enctriple,))
+            else:
+                ctx_idx.add(enctriple)
 
     def __getTripleContexts(self, enctriple, skipQuoted=False):
         """return a list of (encoded) contexts for the triple, skipping
@@ -453,6 +486,10 @@ class ZODBStore(Persistent, Store):
             del self.__tripleContexts[enctriple]
         else:
             self.__tripleContexts[enctriple] = ctxs
+        if not self._is_in_all_triples:
+            triples = self.__contextIndex.get(cid, None)
+            if triples is not None:
+                triples.remove(enctriple)
 
     def __obj2id_finf(self, obj):
         if obj is None:
@@ -658,11 +695,10 @@ class ZODBStore(Persistent, Store):
     def __all_triples(self, cid):
         """return a generator which yields all the triples (unencoded) of
            the given context"""
-        for tset in self.__subjectIndex.values():
-            for enctriple in set(tset):  # copy
-                if self.__tripleHasContext(enctriple, cid):
-                    yield (self.__decodeTriple(enctriple),
-                           self.__contexts(enctriple))
+        with self._in_all_triples():
+            for enctriple in self.__contextIndex.get(cid, ()):
+                yield (self.__decodeTriple(enctriple),
+                       self.__contexts(enctriple))
 
     def __contexts(self, enctriple):
         """return a generator for all the non-quoted contexts (unencoded)

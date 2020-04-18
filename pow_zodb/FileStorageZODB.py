@@ -13,6 +13,16 @@ from .ZODB import ZODBStore
 L = logging.getLogger(__name__)
 
 
+class _UnopenedStore(object):
+    __slots__ = ()
+
+    def __getattr__(self, *args):
+        raise Exception('This FileStorageZODBStore has not been opened')
+
+
+UNOPENED_STORE = _UnopenedStore()
+
+
 class FileStorageZODBStore(Store):
     '''
     `~ZODB.FileStorage.FileStorage`-backed Store
@@ -26,7 +36,7 @@ class FileStorageZODBStore(Store):
 
     def __init__(self, *args, **kwargs):
         super(FileStorageZODBStore, self).__init__(*args, **kwargs)
-        self._store = None
+        self._store = UNOPENED_STORE
 
     def open(self, configuration, create=True):
         if isinstance(configuration, dict):

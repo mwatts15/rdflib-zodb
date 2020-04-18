@@ -17,7 +17,3 @@ class FileStorageOpenTest(unittest.TestCase):
 
         with self.assertRaisesRegex(TypeError, 'not a config'):
             self.cut.open(NotAConfiguration())
-
-    def test_wrong_type_type_error(self):
-        with self.assertRaisesRegex(TypeError, 'not a config'):
-            self.cut.open(NotAConfiguration())
