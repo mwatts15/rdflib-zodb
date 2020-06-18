@@ -123,7 +123,9 @@ class ZODBStore(Persistent, Store):
         return getattr(self, '_v_all_triples', False)
 
     def _rdf_type_id(self):
-        if not hasattr(self, '__rdf_type_id_v'):
+        try:
+            self.__rdf_type_id_v
+        except AttributeError:
             self.__rdf_type_id_v = self.__obj2id(RDF.type)
         return self.__rdf_type_id_v
 
