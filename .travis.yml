@@ -12,17 +12,17 @@ before_install:
 jobs:
     include:
         - python:
-            - 3.4
-          script: tox -e flake
-        - python:
-            - 2.7
-          script: tox -e py27
-        - python:
-            - 3.4
-          script: tox -e py34
-        - python:
             - 3.6
           script: tox -e py36
+        - python:
+            - 3.7
+          script: tox -e py37
+        - python:
+            - 3.8
+          script: tox -e py38
+        - python:
+            - 3.6
+          script: tox -e flake
         - install: pip install --quiet --default-timeout 60 coveralls
           script: tox -e cover
           after_script: coveralls
