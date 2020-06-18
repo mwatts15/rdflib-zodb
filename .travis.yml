@@ -1,8 +1,5 @@
 language: python
 
-python:
-  - 2.7
-
 before_install:
 - pip install --upgrade pip
 - pip install --default-timeout 60 tox
