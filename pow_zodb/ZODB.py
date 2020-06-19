@@ -684,15 +684,21 @@ class ZODBStore(Persistent, Store):
 
     def __encodeTriple_finf(self, triple):
         """ encode a whole triple, returning the encoded triple. Returns NO_IDs if a triple isn't found """
-        return tuple(self.__obj2id_finf(s) for s in triple)
+        return (self.__obj2id_finf(triple[0]),
+                self.__obj2id_finf(triple[1]),
+                self.__obj2id_finf(triple[2]))
 
     def __encodeTriple(self, triple):
         """encode a whole triple, returning the encoded triple"""
-        return tuple(self.__obj2id(s) for s in triple)
+        return (self.__obj2id(triple[0]),
+                self.__obj2id(triple[1]),
+                self.__obj2id(triple[2]))
 
     def __decodeTriple(self, enctriple):
         """decode a whole encoded triple, returning the original triple"""
-        return tuple(self.__int2obj[s] for s in enctriple)
+        return (self.__int2obj[enctriple[0]],
+                self.__int2obj[enctriple[1]],
+                self.__int2obj[enctriple[2]])
 
     def __all_triples(self, cid):
         """return a generator which yields all the triples (unencoded) of
