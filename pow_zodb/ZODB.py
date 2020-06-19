@@ -15,6 +15,7 @@ import itertools
 
 import BTrees
 from BTrees.Length import Length
+from BTrees.OOBTree import intersection as oo_intersection
 
 ANY = Any = None
 DEFAULT = BNode('ZODBStore:DEFAULT')
@@ -24,6 +25,11 @@ L = logging.getLogger(__name__)
 #     disk access?)
 #   * compare BTree intersect to builtin set operation (needs reduce)
 #   * compare against BDB with disk access
+TRIPLE_IN_GRAPH_COUNT = 0
+TYPE_COUNT = 0
+ALL_COUNT = 0
+TWO_SETS_COUNT = 0
+THREE_SETS_COUNT = 0
 
 
 def grouper(iterable, n):
@@ -277,6 +283,8 @@ class ZODBStore(Persistent, Store):
                     self.__contextIndex.pop(req_cid)
 
     def triples(self, triplein, context=None):
+        global TRIPLE_IN_GRAPH_COUNT, TYPE_COUNT, ALL_COUNT, TWO_SETS_COUNT, \
+                THREE_SETS_COUNT
         rng = None
         context = getattr(context, 'identifier', context)
         if context is not None:
@@ -303,10 +311,12 @@ class ZODBStore(Persistent, Store):
 
         # all triples case (no triple parts given as pattern)
         if sid is None and pid is None and oid is None:
+            ALL_COUNT += 1
             return self.__all_triples(cid)
 
         # optimize "triple in graph" case (all parts given)
         if sid is not None and pid is not None and oid is not None:
+            TRIPLE_IN_GRAPH_COUNT += 1
             if sid in self.__subjectIndex and \
                     enctriple in self.__subjectIndex[sid] and \
                     self.__tripleHasContext(enctriple, cid):
@@ -315,6 +325,7 @@ class ZODBStore(Persistent, Store):
                 return self.__emptygen()
 
         if sid is not None and pid == self._rdf_type_id():
+            TYPE_COUNT += 1
             typs = self._rdf_type_index().get(sid, None)
             if typs is not None:
                 return ((self.__decodeTriple(enctriple),
@@ -326,17 +337,17 @@ class ZODBStore(Persistent, Store):
         sets = []
         if sid is not None:
             if sid in self.__subjectIndex:
-                sets.append(set(self.__subjectIndex[sid]))
+                sets.append(self.__subjectIndex[sid])
             else:
                 return self.__emptygen()
         if pid is not None:
             if pid in self.__predicateIndex:
-                sets.append(set(self.__predicateIndex[pid]))
+                sets.append(self.__predicateIndex[pid])
             else:
                 return self.__emptygen()
         if oid is not None:
             if oid in self.__objectIndex:
-                sets.append(set(self.__objectIndex[oid]))
+                sets.append(self.__objectIndex[oid])
             else:
                 return self.__emptygen()
 
@@ -344,11 +355,12 @@ class ZODBStore(Persistent, Store):
             rng = self.__objsInRange(rng)
 
         # to get the result, do an intersection of the sets (if necessary)
-        if len(sets) > 1:
-            # BTrees intersection: reduce(intersection, sets)
-            enctriples = sets[0].intersection(*sets[1:])
+        if len(sets) == 3:
+            enctriples = oo_intersection(oo_intersection(sets[0], sets[1]), sets[2])
+        elif len(sets) == 2:
+            enctriples = oo_intersection(sets[0], sets[1])
         else:
-            enctriples = sets[0].copy()  # OOSet(sets[0])
+            enctriples = set(sets[0])  # OOSet(sets[0])
 
         if rng is not None:
             return ((self.__decodeTriple(enctriple),
