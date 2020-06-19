@@ -336,20 +336,20 @@ class ZODBStore(Persistent, Store):
         # remaining cases: one or two out of three given
         sets = []
         if sid is not None:
-            if sid in self.__subjectIndex:
-                sets.append(self.__subjectIndex[sid])
-            else:
+            sset = self.__subjectIndex.get(sid)
+            if not sset:
                 return self.__emptygen()
+            sets.append(sset)
         if pid is not None:
-            if pid in self.__predicateIndex:
-                sets.append(self.__predicateIndex[pid])
-            else:
+            pset = self.__predicateIndex.get(pid)
+            if not pset:
                 return self.__emptygen()
+            sets.append(pset)
         if oid is not None:
-            if oid in self.__objectIndex:
-                sets.append(self.__objectIndex[oid])
-            else:
+            oset = self.__objectIndex.get(oid)
+            if not oset:
                 return self.__emptygen()
+            sets.append(oset)
 
         if rng is not None:
             rng = self.__objsInRange(rng)
@@ -375,7 +375,7 @@ class ZODBStore(Persistent, Store):
                     if self.__tripleHasContext(enctriple, cid))
 
     def contexts(self, triple=None):
-        if triple is None or triple is (None, None, None):
+        if triple is None or triple == (None, None, None):
             return (context for context in self.__all_contexts)
 
         enctriple = self.__encodeTriple(triple)

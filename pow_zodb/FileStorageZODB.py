@@ -101,8 +101,7 @@ class FileStorageZODBStore(Store):
         return self._store.prefix(namespace)
 
     def namespaces(self):
-        for prefix, namespace in self._store.namespaces():
-            yield prefix, namespace
+        return self._store.namespaces()
 
     def rollback(self):
         self._store.rollback()
@@ -117,16 +116,13 @@ class FileStorageZODBStore(Store):
         self._store.add(triple, context, quoted=quoted)
 
     def contexts(self, triple):
-        for c in self._store.contexts(triple):
-            yield c
+        return self._store.contexts(triple)
 
     def triples(self, triple, context=None):
-        for t in self._store.triples(triple, context=context):
-            yield t
+        return self._store.triples(triple, context)
 
     def triples_choices(self, triple, context=None):
-        for t in self._store.triples_choices(triple, context=context):
-            yield t
+        return self._store.triples_choices(triple, context=context)
 
     def remove(self, triplepat, context=None):
         self._store.remove(triplepat, context=context)
