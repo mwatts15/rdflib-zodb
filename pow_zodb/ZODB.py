@@ -25,11 +25,6 @@ L = logging.getLogger(__name__)
 #     disk access?)
 #   * compare BTree intersect to builtin set operation (needs reduce)
 #   * compare against BDB with disk access
-TRIPLE_IN_GRAPH_COUNT = 0
-TYPE_COUNT = 0
-ALL_COUNT = 0
-TWO_SETS_COUNT = 0
-THREE_SETS_COUNT = 0
 
 
 def grouper(iterable, n):
@@ -283,8 +278,6 @@ class ZODBStore(Persistent, Store):
                     self.__contextIndex.pop(req_cid)
 
     def triples(self, triplein, context=None):
-        global TRIPLE_IN_GRAPH_COUNT, TYPE_COUNT, ALL_COUNT, TWO_SETS_COUNT, \
-                THREE_SETS_COUNT
         rng = None
         context = getattr(context, 'identifier', context)
         if context is not None:
@@ -311,12 +304,10 @@ class ZODBStore(Persistent, Store):
 
         # all triples case (no triple parts given as pattern)
         if sid is None and pid is None and oid is None:
-            ALL_COUNT += 1
             return self.__all_triples(cid)
 
         # optimize "triple in graph" case (all parts given)
         if sid is not None and pid is not None and oid is not None:
-            TRIPLE_IN_GRAPH_COUNT += 1
             if sid in self.__subjectIndex and \
                     enctriple in self.__subjectIndex[sid] and \
                     self.__tripleHasContext(enctriple, cid):
@@ -325,7 +316,6 @@ class ZODBStore(Persistent, Store):
                 return self.__emptygen()
 
         if sid is not None and pid == self._rdf_type_id():
-            TYPE_COUNT += 1
             typs = self._rdf_type_index().get(sid, None)
             if typs is not None:
                 return ((self.__decodeTriple(enctriple),
@@ -410,7 +400,7 @@ class ZODBStore(Persistent, Store):
         if not self.graph_aware:
             Store.add_graph(self, graph)
         else:
-            self.__all_contexts.add(graph)
+            self.__all_contexts.add(getattr(graph, 'identifier', graph))
 
     def remove_graph(self, graph):
         if not self.graph_aware:
@@ -418,7 +408,7 @@ class ZODBStore(Persistent, Store):
         else:
             self.remove((None, None, None), graph)
             try:
-                self.__all_contexts.remove(graph)
+                self.__all_contexts.remove(getattr(graph, 'identifier', graph))
             except KeyError:
                 pass  # we didn't know this graph, no problem
 
@@ -683,9 +673,9 @@ class ZODBStore(Persistent, Store):
         IDs returned and the objects passed in are the same in number.
         """
         slices = list(self.__makeSlices(objs, single_serving=True))
+        ii = self.__obj2int.iteritems
         for least_obj, greatest_obj in slices:
-            items = dict(self.__obj2int.iteritems(min=least_obj,
-                                                  max=greatest_obj))
+            items = dict(ii(least_obj, greatest_obj))
             for j in objs:
                 v = items.get(j)
                 if v is not None:
