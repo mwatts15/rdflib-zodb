@@ -91,6 +91,9 @@ class FileStorageZODBStore(Store):
         self._conn.close()
         self._zdb.close()
 
+        self._conn = None
+        self._zdb = None
+
     def bind(self, prefix, namespace):
         self._store.bind(prefix, namespace)
 
