@@ -345,9 +345,7 @@ class ZODBStore(Persistent, Store):
             rng = self.__objsInRange(rng)
 
         # to get the result, do an intersection of the sets (if necessary)
-        if len(sets) == 3:
-            enctriples = oo_intersection(oo_intersection(sets[0], sets[1]), sets[2])
-        elif len(sets) == 2:
+        if len(sets) == 2:
             enctriples = oo_intersection(sets[0], sets[1])
         else:
             enctriples = set(sets[0])  # OOSet(sets[0])
