@@ -137,17 +137,6 @@ class GraphTestCase(unittest.TestCase):
         self.removeStuff()
         asserte(len(list(triples((Any, Any, Any)))), 0)
 
-    def testStatementNode(self):
-        graph = self.graph
-
-        from rdflib.term import Statement
-        c = URIRef("http://example.org/foo#c")
-        r = URIRef("http://example.org/foo#r")
-        s = Statement((self.michel, self.likes, self.pizza), c)
-        graph.add((s, RDF.value, r))
-        self.assertEqual(r, graph.value(s, RDF.value))
-        self.assertEqual(s, graph.value(predicate=RDF.value, object=r))
-
     def testConnected(self):
         graph = self.graph
         self.addStuff()
