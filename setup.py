@@ -34,8 +34,6 @@ def doc(s):
 
 __version__ = find_version('pow_zodb/__init__.py')
 
-PY2 = sys.version_info.major == 2
-
 
 setup(
     name='pow-store-zodb',
@@ -51,7 +49,7 @@ setup(
         'pytest>=3.4.0',
         'pytest-cov==2.5.1',
         'discover==0.4.0',
-    ] + (['mock==2.0.0'] if PY2 else []),
+    ],
     long_description=doc("""
     ZOPE Object Database implementation of rdflib.store.Store.
 
@@ -59,12 +57,10 @@ setup(
     for general use.
     """),
     classifiers=["Programming Language :: Python",
-                 "Programming Language :: Python :: 2",
-                 "Programming Language :: Python :: 2.7",
                  'Programming Language :: Python :: 3',
-                 'Programming Language :: Python :: 3.4',
                  'Programming Language :: Python :: 3.6',
-                 'Programming Language :: Python :: Implementation :: PyPy',
+                 'Programming Language :: Python :: 3.7',
+                 'Programming Language :: Python :: 3.8',
                  "License :: OSI Approved :: BSD License",
                  "Topic :: Software Development :: Libraries :: Python Modules",
                  "Operating System :: OS Independent",
