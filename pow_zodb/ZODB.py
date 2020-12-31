@@ -1,6 +1,5 @@
 # Author: Michel Pelletier
 
-from rdflib.plugins.memory import randid
 from rdflib.store import Store
 from rdflib.events import Dispatcher
 from rdflib import BNode, RDF
@@ -12,6 +11,7 @@ import logging
 
 import contextlib
 import itertools
+from random import randrange
 
 import BTrees
 from BTrees.Length import Length
@@ -23,8 +23,6 @@ L = logging.getLogger(__name__)
 # TODO:
 #   * is zope.intids id search faster? (maybe with large dataset and actual
 #     disk access?)
-#   * compare BTree intersect to builtin set operation (needs reduce)
-#   * compare against BDB with disk access
 
 
 def grouper(iterable, n):
@@ -517,11 +515,16 @@ class ZODBStore(Persistent, Store):
             try:
                 nextid = self._v_next_id
             except AttributeError:
-                self._v_next_id = nextid = randid()
+                self._v_next_id = nextid = randrange(self.family.minint,
+                        self.family.maxint)
 
             while self.__int2obj.insert(nextid, obj) == 0:
-                nextid += randid()
+                nextid = randrange(self.family.minint,
+                        self.family.maxint)
             self._v_next_id = nextid + 1
+            if self._v_next_id > self.family.maxint:
+                # Delete the next ID so we generate a new one next time round.
+                del self._v_next_id
             o2i[obj] = nextid
         return nextid
 

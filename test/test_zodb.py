@@ -9,6 +9,7 @@ import logging
 _logger = logging.getLogger(__name__)
 
 import os
+from unittest.mock import patch
 from rdflib import RDF, URIRef, BNode, ConjunctiveGraph, Graph
 from .graph_case import GraphTestCase
 from .context_case import ContextTestCase
@@ -60,7 +61,7 @@ class ZODBGraphTestCase(GraphTestCase):
         self.graph.close()
         try:
             transaction.commit()
-        except Exception as e:
+        except Exception:
             # catch commit exception and close db.
             # otherwise db would stay open and follow up tests
             # will detect the db in error state
@@ -235,6 +236,49 @@ class ZODBGraphTestCase(GraphTestCase):
             sorted([(self.michel, self.likes, self.pizza),
                     (self.tarek, self.likes, self.pizza)]),
             'a None in the list might as well not be there')
+
+    def testIdConflict(self):
+        '''
+        There's a case where the internal identifier generation series for terms runs into
+        IDs that have already been minted. This is a test of what happens in that case
+        '''
+        with patch('pow_zodb.ZODB.randrange') as randrange:
+            cut = self.graph.store
+            # Make an object
+            obj_id_1 = cut._ZODBStore__obj2id(self.tarek)
+
+            randrange.return_value = obj_id_1 + 33
+
+            # Fake the conditions for a conflict
+            cut._v_next_id -= 1
+
+            obj_id_2 = cut._ZODBStore__obj2id(self.bob)
+            self.assertEqual(obj_id_2 - obj_id_1, 33)
+
+    def testInsertMinInt(self):
+        '''
+        Make sure we can insert the minimum integer key in the family's range
+        '''
+        cut = self.graph.store
+        # Make an object
+
+        cut._v_next_id = cut.family.minint
+        obj_id_1 = cut._ZODBStore__obj2id(self.tarek)
+        self.assertEqual(obj_id_1, cut.family.minint)
+
+    def testOverflow(self):
+        '''
+        Test that an overflow is properly prevented
+        '''
+        with patch('pow_zodb.ZODB.randrange') as randrange:
+            cut = self.graph.store
+            # Make an object
+            cut._v_next_id = cut.family.maxint
+            obj_id_1 = cut._ZODBStore__obj2id(self.bob)
+            randrange.return_value = obj_id_1 - 123
+            obj_id_2 = cut._ZODBStore__obj2id(self.tarek)
+            self.assertEqual(obj_id_2 - obj_id_1, -123)
+
 
 
 class ZODBContextTestCase(ContextTestCase):
