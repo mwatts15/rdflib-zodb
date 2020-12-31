@@ -10,7 +10,7 @@ _logger = logging.getLogger(__name__)
 
 import os
 from unittest.mock import patch
-from rdflib import RDF, URIRef, BNode, ConjunctiveGraph, Graph
+from rdflib import URIRef, BNode, ConjunctiveGraph, Graph
 from .graph_case import GraphTestCase
 from .context_case import ContextTestCase
 
@@ -243,17 +243,18 @@ class ZODBGraphTestCase(GraphTestCase):
         IDs that have already been minted. This is a test of what happens in that case
         '''
         with patch('pow_zodb.ZODB.randrange') as randrange:
+            randrange.return_value = 0
             cut = self.graph.store
             # Make an object
-            obj_id_1 = cut._ZODBStore__obj2id(self.tarek)
+            obj_id_1 = cut._obj2id(self.tarek)
 
-            randrange.return_value = obj_id_1 + 33
+            randrange.return_value = obj_id_1[1] + 33
 
             # Fake the conditions for a conflict
             cut._v_next_id -= 1
 
-            obj_id_2 = cut._ZODBStore__obj2id(self.bob)
-            self.assertEqual(obj_id_2 - obj_id_1, 33)
+            obj_id_2 = cut._obj2id(self.bob)
+            self.assertEqual(obj_id_2[1] - obj_id_1[1], 33)
 
     def testInsertMinInt(self):
         '''
@@ -263,8 +264,8 @@ class ZODBGraphTestCase(GraphTestCase):
         # Make an object
 
         cut._v_next_id = cut.family.minint
-        obj_id_1 = cut._ZODBStore__obj2id(self.tarek)
-        self.assertEqual(obj_id_1, cut.family.minint)
+        obj_id_1 = cut._obj2id(self.tarek)
+        self.assertEqual(obj_id_1[1], cut.family.minint)
 
     def testOverflow(self):
         '''
@@ -274,11 +275,10 @@ class ZODBGraphTestCase(GraphTestCase):
             cut = self.graph.store
             # Make an object
             cut._v_next_id = cut.family.maxint
-            obj_id_1 = cut._ZODBStore__obj2id(self.bob)
-            randrange.return_value = obj_id_1 - 123
-            obj_id_2 = cut._ZODBStore__obj2id(self.tarek)
-            self.assertEqual(obj_id_2 - obj_id_1, -123)
-
+            obj_id_1 = cut._obj2id(self.bob)
+            randrange.return_value = obj_id_1[1] - 123
+            obj_id_2 = cut._obj2id(self.tarek)
+            self.assertEqual(obj_id_2[1] - obj_id_1[1], -123)
 
 
 class ZODBContextTestCase(ContextTestCase):
