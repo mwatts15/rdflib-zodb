@@ -11,6 +11,7 @@ import logging
 
 import contextlib
 import itertools
+from operator import itemgetter
 from random import randrange
 
 import BTrees
@@ -23,6 +24,21 @@ L = logging.getLogger(__name__)
 # TODO:
 #   * is zope.intids id search faster? (maybe with large dataset and actual
 #     disk access?)
+
+
+ID_SERIES = {'default': 0}
+ID_MAX = 2 ** 48 - 1
+ID_MASK = ID_MAX
+SERIES_MAX = 2 ** 16 - 1
+
+
+def register_id_series(name):
+    if name in ID_SERIES:
+        raise ValueError('The given name has already been registered')
+    series = max(ID_SERIES.values()) + 1
+    if series > SERIES_MAX:
+        raise Exception('More than the allowed number of series has been registered')
+    ID_SERIES[name] = series
 
 
 def grouper(iterable, n):
@@ -63,7 +79,7 @@ class ZODBStore(Persistent, Store):
     transaction_aware = True
     supports_range_queries = True
 
-    family = BTrees.family32
+    family = BTrees.family64
     _context_lengths = None
     version = 2
 
@@ -73,17 +89,18 @@ class ZODBStore(Persistent, Store):
             self.family = family
         self._namespace = self.family.OO.BTree()
         self._prefix = self.family.OO.BTree()
-        self._int2obj = self.family.OO.BTree()
-        self._int2obj[None] = self.family.IO.BTree()
-        self._obj2int = self.family.OO.BTree()
+        self._int2obj = self.family.UO.BTree()
+        self._int2obj[0] = self.family.UO.BTree()
+        self._obj2int = self.family.UO.BTree()
+        self._obj2int[0] = self.family.OU.BTree()
         # subject index key: sid val: enctriple
-        self._subjectIndex = self.family.OO.BTree()
+        self._subjectIndex = self.family.UO.BTree()
         # predicate index key: pid val: enctriple
-        self._predicateIndex = self.family.OO.BTree()
+        self._predicateIndex = self.family.UO.BTree()
         # object index key: oid val: enctriple
-        self._objectIndex = self.family.OO.BTree()
+        self._objectIndex = self.family.UO.BTree()
         # context index key: cid val: enctriple
-        self._contextIndex = self.family.OO.BTree()
+        self._contextIndex = self.family.UO.BTree()
         self._tripleContexts = self.family.OO.BTree()
         self._all_contexts = self.family.OO.TreeSet()
         self._defaultContexts = None
@@ -199,7 +216,9 @@ class ZODBStore(Persistent, Store):
             self._objectIndex[oid] = self.family.OO.Set((enctriple,))
 
     def _objsInRange(self, rng):
-        return minmax(self._obj2int.values(min=rng[0], max=rng[1]))
+        series_name = getattr(rng[0], 'zodb_id_series', 'default')
+        series = ID_SERIES[series_name]
+        return minmax(self._obj2int[series].values(min=rng[0], max=rng[1]))
 
     def remove(self, triplepat, context=None):
         Store.remove(self, triplepat, context)
@@ -451,7 +470,12 @@ class ZODBStore(Persistent, Store):
     def _obj2id_finf(self, obj):
         if obj is None:
             return None
-        return self._obj2int.get(obj, NO_ID)
+        series_name = getattr(obj, 'zodb_id_series', 'default')
+        series = ID_SERIES[series_name]
+        o2i = self._obj2int.get(series)
+        if o2i is not None:
+            return o2i.get(obj, NO_ID)
+        return NO_ID
 
     def _obj2id(self, obj):
         """encode object, storing it in the encoding map if necessary, and
@@ -466,42 +490,43 @@ class ZODBStore(Persistent, Store):
         if obj is None:
             return None
 
-        o2i = self._obj2int
+        series_name = getattr(obj, 'zodb_id_series', 'default')
+        series = ID_SERIES[series_name]
+        o2i = self._obj2int.get(series, None)
+        if o2i is None:
+            self._obj2int[series] = o2i = self.family.OU.BTree()
+
         nextid = o2i.get(obj, None)
         if nextid is None:
-            series = getattr(obj, 'zodb_id_series', None)
             try:
                 nextid_int = self._v_next_id
             except AttributeError:
-                self._v_next_id = nextid_int = randrange(self.family.minint, self.family.maxint)
+                self._v_next_id = nextid_int = randrange(0, ID_MAX)
 
             try:
                 i2o = self._int2obj[series]
             except KeyError:
-                self._int2obj[series] = i2o = self.family.IO.BTree()
+                self._int2obj[series] = i2o = self.family.UO.BTree()
 
             while i2o.insert(nextid_int, obj) == 0:
-                nextid_int = randrange(self.family.minint, self.family.maxint)
+                nextid_int = randrange(0, ID_MAX)
             self._v_next_id = nextid_int + 1
-            if self._v_next_id > self.family.maxint:
+            if self._v_next_id > ID_MAX:
                 # Delete the next ID so we generate a new one next time round.
                 del self._v_next_id
-            o2i[obj] = nextid = (series, nextid_int)
+            o2i[obj] = nextid = (series << 48) | nextid_int
         return nextid
 
-    def _makeSlices(self, items, thresh=100000, single_serving=False):
-        if not single_serving:
-            items = sorted(items)
-            _min = items[0]
-            _last = items[0]
-            for cur in items:
-                if cur - _min > thresh:
-                    yield (_min, _last)
-                    _min = cur
-                _last = cur
-            yield(_min, _last)
-        else:
-            yield (min(items), max(items))
+    def _make_object_slices(self, items, thresh=100000):
+        items = ((ID_SERIES[getattr(x, 'zodb_id_series', 'default')], x)
+                for x in items)
+        items = sorted(items)
+        items = itertools.groupby(items, key=itemgetter(0))
+        for series, item_group in items:
+            item_group = list(item_group)
+            least = min(item_group)
+            greatest = max(item_group)
+            yield series, least[1], greatest[1]
 
     def _exo(self, index, triple, context, tidx, aidx, bidx):
         """
@@ -509,7 +534,7 @@ class ZODBStore(Persistent, Store):
 
         Parameters
         ----------
-        index : IOBTree
+        index : UOBTree
             the index of the 'target' entry
         triple : tuple
             the triple to query against
@@ -567,21 +592,21 @@ class ZODBStore(Persistent, Store):
                 last = x
             obj_ids = newids
 
-            slices = self._makeSlices(obj_ids, single_serving=True)
-            for min_id, max_id in slices:
-                items = dict(index.iteritems(min=min_id, max=max_id))
-                for y in obj_ids:
-                    yitems = items.get(y)
-                    if yitems:
-                        if aid is None and bid is None:
-                            results.add(yitems)
-                        elif aid is None:
-                            results.add(z for z in yitems if z[bidx] == bid)
-                        elif bid is None:
-                            results.add(z for z in yitems if z[aidx] == aid)
-                        else:
-                            results.add(z for z in yitems
-                                        if (z[aidx] == aid and z[bidx] == bid))
+            min_id = min(obj_ids)
+            max_id = max(obj_ids)
+            items = dict(index.iteritems(min=min_id, max=max_id))
+            for y in obj_ids:
+                yitems = items.get(y)
+                if yitems:
+                    if aid is None and bid is None:
+                        results.add(yitems)
+                    elif aid is None:
+                        results.add(z for z in yitems if z[bidx] == bid)
+                    elif bid is None:
+                        results.add(z for z in yitems if z[aidx] == aid)
+                    else:
+                        results.add(z for z in yitems
+                                    if (z[aidx] == aid and z[bidx] == bid))
 
             return ((self._decodeTriple(enctriple),
                      self._contexts(enctriple))
@@ -631,9 +656,9 @@ class ZODBStore(Persistent, Store):
         to 'fail' if there's a miss, although one can always check if the
         IDs returned and the objects passed in are the same in number.
         """
-        slices = list(self._makeSlices(objs, single_serving=True))
-        ii = self._obj2int.iteritems
-        for least_obj, greatest_obj in slices:
+        slices = list(self._make_object_slices(objs))
+        for series, least_obj, greatest_obj in slices:
+            ii = self._obj2int[series].iteritems
             items = dict(ii(least_obj, greatest_obj))
             for j in objs:
                 v = items.get(j)
@@ -641,7 +666,9 @@ class ZODBStore(Persistent, Store):
                     yield v
 
     def _id2obj(self, id):
-        return self._int2obj[id[0]][id[1]] if id is not None else None
+        series = id >> 48
+        id_part = id & ID_MASK
+        return self._int2obj[series][id_part] if id is not None else None
 
     def _encodeTriple_finf(self, triple):
         """ encode a whole triple, returning the encoded triple. Returns NO_IDs if a triple isn't found """
@@ -658,9 +685,9 @@ class ZODBStore(Persistent, Store):
     def _decodeTriple(self, enctriple):
         """decode a whole encoded triple, returning the original triple"""
         try:
-            return (self._int2obj[enctriple[0][0]][enctriple[0][1]],
-                    self._int2obj[enctriple[1][0]][enctriple[1][1]],
-                    self._int2obj[enctriple[2][0]][enctriple[2][1]])
+            return (self._id2obj(enctriple[0]),
+                    self._id2obj(enctriple[1]),
+                    self._id2obj(enctriple[2]))
         except TypeError as e:
             raise TypeError(enctriple) from e
 
